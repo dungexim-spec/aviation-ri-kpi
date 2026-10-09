@@ -16,7 +16,7 @@
 
   const state = {
     books: [], main: null, snaps: [], tab: 'overview', settings: loadSettings(), asOfManual: false,
-    scope: { broker: '', channel: '', region: '' }, regionDim: 'region', renewDays: 90,
+    scope: { broker: '', channel: '', region: '', coll: '' }, collDim: 'broker', regionDim: 'region', renewDays: 90,
     claimF: { uy: '', st: '', flag: '' }, issueF: { sev: '', uy: '', q: '' },
   };
 
@@ -81,7 +81,8 @@
     const m = state.main;
     const nCrit = m ? m.issues.filter((i) => i.sev === 'Cao').length : 0;
     const nRen = m ? E.renewals(m, 30, 30).filter((r) => !r.renewed).length : 0;
-    $('#tabs').innerHTML = TABS.map(([k, l]) => `<button role="tab" aria-selected="${state.tab === k}" data-tab="${k}">${l}${k === 'issues' && nCrit ? `<span class="count">${nCrit}</span>` : ''}${k === 'renew' && nRen ? `<span class="count warn">${nRen}</span>` : ''}</button>`).join('');
+    const nOd = m ? m.insts.filter((i) => i.days > 0).length : 0;
+    $('#tabs').innerHTML = TABS.map(([k, l]) => `<button role="tab" aria-selected="${state.tab === k}" data-tab="${k}">${l}${k === 'issues' && nCrit ? `<span class="count">${nCrit}</span>` : ''}${k === 'renew' && nRen ? `<span class="count warn">${nRen}</span>` : ''}${k === 'collections' && nOd ? `<span class="count">${nOd}</span>` : ''}</button>`).join('');
   }
 
   // ---------- Bảng ----------
@@ -157,7 +158,8 @@
       ${sec('Chi phí khai thác')}${row('Brokerage, SMB (GWP − NWP)', (s) => fN(s.brokSmbUsd))}${row('Facility fee, khấu trừ khác, quỹ', (s) => fN(s.otherCostUsd))}${row('Chi phí khai thác', (s) => fN(s.acqUsd), 'b')}${row('Chi phí khai thác % GWP', (s) => fP(s.acqPct), 'b')}
       ${sec('Bồi thường')}${row('Đã trả', (s) => fN(s.paid))}${row('Đã trả % GWP', (s) => fP(s.paidPct))}${row('Dự phòng', (s) => fN(s.os))}${row('Dự phòng % GWP', (s) => fP(s.osPct))}${row('Bồi thường (đã trả + dự phòng)', (s) => fN(s.incurred), 'b')}${row('Bồi thường % GWP', (s) => fP(s.claimsPct), 'b')}
       ${sec('Kết hợp chi phí khai thác và bồi thường')}${row('Kết hợp', (s) => fN(s.combinedUsd), 'b')}${row('Tỷ lệ kết hợp % GWP', (s) => ratioCell(s.combinedPct), 'b')}${row('Còn lại sau chi phí KT và bồi thường', (s) => fN(s.resultUsd))}
-      ${sec('Tham khảo')}${row('Phí đã hưởng (net earning pro-rata)', (s) => fN(s.ep))}${row('Loss ratio / phí đã hưởng', (s) => fP(s.lrEP))}${row('Số hồ sơ bồi thường', (s) => fN(s.nClaims))}${row('Kỳ phí quá hạn', (s) => fN(s.overdue))}
+      ${sec('Thu phí')}${row('Phí theo lịch thanh toán', (s) => fN(s.schedAmt))}${row('Thực thu', (s) => fN(s.collected), 'b')}${row('Thực thu % GWP', (s) => fP(s.collectedPctGwp), 'b')}${row('Thực thu % NWP', (s) => fP(s.collectedPctNwp))}${row('Phí quá hạn chưa thu', (s) => fN(s.overdue))}${row(`Phí đến hạn trong ${state.settings.upcomingDays || 30} ngày tới`, (s) => fN(s.upcoming))}${row('NWP chưa có lịch thanh toán', (s) => fN(s.noSchedNwp))}
+      ${sec('Tham khảo')}${row('Phí đã hưởng (net earning pro-rata)', (s) => fN(s.ep))}${row('Loss ratio / phí đã hưởng', (s) => fP(s.lrEP))}${row('Số hồ sơ bồi thường', (s) => fN(s.nClaims))}
       </tbody></table></div>`;
     const rn = E.renewals(m, state.settings.renewDays || 90, 30);
     const n30 = rn.filter((r) => !r.renewed && r.daysLeft >= 0 && r.daysLeft <= 30), exp = rn.filter((r) => !r.renewed && r.daysLeft < 0), nAll = rn.filter((r) => !r.renewed && r.daysLeft >= 0);
@@ -179,12 +181,14 @@
     const nCrit = m.issues.filter((i) => i.sev === 'Cao').length;
     if (nCrit) ins.push(['Cao', `${nCrit} lỗi dữ liệu mức cao (tab Kiểm tra dữ liệu).`]);
     ins.sort((a, b) => ORD[a[0]] - ORD[b[0]]);
-    return `${banner}
+    const pb = (T.overdue > 0 || T.upcoming > 0) ? `<div class="panel banner danger"><div><b>Nhắc thu phí</b> · ${fN(T.upcoming)} USD (${T.nUpcoming} kỳ) đến hạn trong ${state.settings.upcomingDays || 30} ngày tới · ${fN(T.overdue)} USD (${T.nOverdue} kỳ) đã quá hạn, trong đó ${fN(T.overdue90)} USD quá ${m.settings.overdueAlertDays} ngày.</div><button data-goto="collections">Xem chi tiết</button></div>` : '';
+    return `${banner}${pb}
       <div class="grid kpis">
         ${kpi('GWP · NWP', (s) => fN(s.gwp), (s) => fN(s.nwp))}
         ${kpi('Chi phí khai thác', (s) => fN(s.acqUsd), (s) => fP(s.acqPct))}
         ${kpi('Bồi thường (đã trả + DP)', (s) => fN(s.incurred), (s) => fP(s.claimsPct))}
         ${kpi('Kết hợp CP KT + bồi thường', (s) => fN(s.combinedUsd), (s) => ratioCell(s.combinedPct))}
+        ${kpi('Thực thu phí', (s) => fN(s.collected), (s) => fP(s.collectedPctGwp) + ' GWP')}
       </div>
       <div class="grid two section">
         <div class="panel"><h2>Tỷ lệ kết hợp theo năm nghiệp vụ</h2>${comboChart(cols.map((c) => ({ cat: c, s: get(c) })), `% trên GWP. Số liệu đến ${fD(m.asOf)}; bồi thường chưa gồm IBNR.`)}</div>
@@ -293,15 +297,45 @@
   }
 
   function collections() {
-    const m = state.main; const uys = m.uys; const B = ['0-30', '31-90', '91-180', '181-365', 'Trên 365'];
-    const ag = B.map((b) => { const o = { cat: b }; uys.forEach((u) => { o[u] = m.insts.filter((i) => i.uy === u && i.bucket === b).reduce((a, i) => a + i.amount, 0); }); return o; });
-    const cov = uys.map((u) => { const bp = m.policies.filter((p) => p.uy === u && p.bound_); const ins = m.insts.filter((i) => i.uy === u); const ks = new Set(ins.map((i) => i.key)); return { u, n: bp.length, sched: bp.filter((p) => ks.has(p.key)).length, nwp: bp.reduce((a, p) => a + p.nwp, 0), amt: ins.reduce((a, i) => a + i.amount, 0), paid: ins.filter((i) => i.isPaid).reduce((a, i) => a + i.amount, 0), od: ins.filter((i) => i.days > 0).reduce((a, i) => a + i.amount, 0) }; });
-    const od = m.insts.filter((i) => i.days > 0);
-    return `<div class="grid two">
-        <div class="panel"><h2>Tuổi nợ kỳ phí chưa ghi nhận thu</h2>${table([{ l: 'Nhóm (ngày)', v: (r) => r.cat }].concat(uys.map((u) => ({ l: u, v: (r) => r[u], f: fN, num: true }))), ag)}<div class="refline">Kỳ đã đến hạn trước ${fD(m.asOf)} mà chưa ghi "Paid".</div></div>
-        <div class="panel"><h2>Độ phủ lịch thanh toán</h2>${table([{ l: 'UY', v: (r) => r.u }, { l: 'HĐ có lịch', v: (r) => r.sched, h: (r) => `${r.sched}/${r.n}`, num: true }, { l: 'NWP', v: (r) => r.nwp, f: fN, num: true }, { l: 'Tổng kỳ phí', v: (r) => r.amt, f: fN, num: true }, { l: 'Đã thu', v: (r) => r.paid, f: fN, num: true }, { l: 'Quá hạn', v: (r) => r.od, f: fN, num: true }], cov)}</div>
+    const m = state.main; const S = m.settings; const up = S.upcomingDays || 30; const sc = state.scope.coll || ''; const dim = state.collDim || 'broker';
+    const inScope = (x) => !sc || x.uy === sc;
+    const T = E.summarize(m, (p) => inScope(p));
+    const uys = sc ? [sc] : m.uys;
+    const B = ['0-30', '31-90', '91-180', '181-365', 'Trên 365'];
+    const ag = B.map((b) => { const o = { cat: b }; uys.forEach((u) => { o[u] = m.insts.filter((i) => i.uy === u && i.bucket === b).reduce((a, i) => a + i.amount, 0); }); o.t = uys.reduce((a, u) => a + o[u], 0); return o; });
+    const keyOk = new Set(m.policies.filter((p) => p.bound_ && inScope(p)).map((p) => p.key));
+    const od = m.insts.filter((i) => i.days > 0 && keyOk.has(i.key));
+    const upc = m.insts.filter((i) => i.daysToDue !== null && i.daysToDue <= up && keyOk.has(i.key));
+    const pol = Object.fromEntries(m.policies.map((p) => [p.key, p]));
+    const cc = (get, foot) => {
+      const c = (l, k, f, tip) => ({ l, v: (r) => get(r)[k], f, num: true, t: foot ? () => f(foot[k]) : null, tip });
+      return [c('GWP', 'gwp', fN), c('NWP', 'nwp', fN), c('Phí theo lịch', 'schedAmt', fN, 'Tổng các kỳ phí trong sheet Installment'), c('Đã đến hạn', 'dueAmt', fN, 'Các kỳ có hạn thanh toán đến ngày báo cáo'),
+        c('Thực thu', 'collected', fN), c('Thu % GWP', 'collectedPctGwp', fP), c('Thu % NWP', 'collectedPctNwp', fP), c('Thu % đến hạn', 'collectedPctDue', fP),
+        { l: 'Quá hạn', v: (r) => get(r).overdue, h: (r) => get(r).overdue > 0 ? `<span class="neg">${fN(get(r).overdue)}</span>` : fN(get(r).overdue), num: true, t: foot ? () => fN(foot.overdue) : null },
+        c(`Đến hạn ≤ ${up} ngày`, 'upcoming', fN), c('HĐ chưa có lịch', 'noSchedN', fN), c('NWP chưa có lịch', 'noSchedNwp', fN)];
+    };
+    const byUy = uys.map((u) => ({ cat: u, s: E.summarize(m, (p) => p.uy === u) }));
+    const seg = E.segment(m, dim, sc ? (p) => p.uy === sc : null);
+    const dimLab = { broker: 'Môi giới', channel: 'Kênh', region: 'Khu vực', domicile: 'Quốc gia' }[dim];
+    const tile = (l, v, sub, cls) => `<div class="panel tile ${cls || ''}"><div class="lab">${l}</div><div class="big num">${v}</div><div class="small muted">${sub}</div></div>`;
+    return `<div class="toolbar">${uySelect('scope-coll', sc)}
+        <label class="fld" for="upDays">Nhắc phí sắp đến hạn trong<select id="upDays">${[7, 15, 30, 60, 90].map((d) => `<option value="${d}" ${d === up ? 'selected' : ''}>${d} ngày tới</option>`).join('')}</select></label>
+        <span class="muted small">Tính đến ngày báo cáo ${fD(m.asOf)}. Thực thu = Actual NWP của kỳ ghi "Paid" (nếu chưa nhập thì lấy số tiền kỳ).</span></div>
+      <div class="grid tiles">
+        ${tile('Thực thu', fN(T.collected), `${fP(T.collectedPctGwp)} GWP · ${fP(T.collectedPctNwp)} NWP`)}
+        ${tile('Đã đến hạn', fN(T.dueAmt), `đã thu ${fP(T.collectedPctDue)} số đến hạn`)}
+        ${tile('Quá hạn chưa thu', fN(T.overdue), `${T.nOverdue} kỳ · ${fP(T.overduePctNwp)} NWP`, T.overdue > 0 ? 'alert' : '')}
+        ${tile(`Sắp đến hạn (≤ ${up} ngày)`, fN(T.upcoming), `${T.nUpcoming} kỳ`, T.upcoming > 0 ? 'soon' : '')}
+        ${tile('Chưa có lịch thanh toán', fN(T.noSchedNwp), `${T.noSchedN} HĐ · NWP chưa theo dõi được`)}
       </div>
-      <div class="section"><h2>Kỳ phí quá hạn (${od.length})</h2>${table([{ l: 'UY', v: (i) => i.uy }, { l: 'Original insured', v: (i) => i.insured, wrap: true }, { l: 'Broker', v: (i) => i.broker }, { l: 'Kỳ', v: (i) => i.n, num: true }, { l: 'Hạn', v: (i) => i.due, f: fD }, { l: 'Số tiền', v: (i) => i.amount, f: fN2, num: true }, { l: 'Ngày quá hạn', v: (i) => i.days, f: fN, num: true }, { l: 'Nhóm', v: (i) => i.bucket }], od, { tall: true, sort: { i: 6, dir: -1 } })}</div>`;
+      <div class="section"><h2>Thu phí theo năm nghiệp vụ</h2>${table([{ l: 'UY', v: (r) => r.cat }].concat(cc((r) => r.s, uys.length > 1 ? T : null)), byUy, { foot: uys.length > 1, groups: [['', 1], ['Doanh thu', 2], ['Kỳ phí', 2], ['Thực thu', 4], ['Cần thu', 2], ['Chưa theo dõi', 2]] })}</div>
+      <div class="section"><div class="toolbar"><h2 style="margin:0">Thu phí theo</h2><label class="fld" for="collDim"><select id="collDim">${[['broker', 'Môi giới'], ['channel', 'Kênh'], ['region', 'Khu vực'], ['domicile', 'Quốc gia']].map(([k, l]) => `<option value="${k}" ${k === dim ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        ${table([{ l: dimLab, v: (r) => r.cat, wrap: true }].concat(cc((r) => r.total, seg.all)), seg.rows, { foot: true, sort: { i: 9, dir: -1 } })}</div>
+      <div class="grid section">
+        <div class="panel"><h2>Sắp đến kỳ thu (${upc.length})</h2>${table([{ l: 'Hạn', v: (i) => i.due, f: fD }, { l: 'Còn (ngày)', v: (i) => i.daysToDue, f: fN, num: true }, { l: 'UY', v: (i) => i.uy }, { l: 'Original insured', v: (i) => i.insured, wrap: true }, { l: 'Broker', v: (i) => i.broker }, { l: 'Kỳ', v: (i) => i.n, num: true }, { l: 'Số tiền', v: (i) => i.amount, f: fN2, num: true }], upc, { tall: true, sort: { i: 0, dir: 1 } })}</div>
+        <div class="panel"><h2>Tuổi nợ phí quá hạn</h2>${table([{ l: 'Số ngày quá hạn', v: (r) => r.cat }].concat(uys.map((u) => ({ l: u, v: (r) => r[u], f: fN, num: true }))).concat(uys.length > 1 ? [{ l: 'Tổng', v: (r) => r.t, f: fN, num: true }] : []), ag)}</div>
+      </div>
+      <div class="section"><h2>Phí đã quá hạn (${od.length} kỳ · ${fN(od.reduce((a, i) => a + i.amount, 0))} USD)</h2>${table([{ l: 'UY', v: (i) => i.uy }, { l: 'Original insured', v: (i) => i.insured, wrap: true }, { l: 'Broker', v: (i) => i.broker }, { l: 'Kênh', v: (i) => (pol[i.key] || {}).channel || '' }, { l: 'Kỳ', v: (i) => i.n, num: true }, { l: 'Hạn', v: (i) => i.due, f: fD }, { l: 'Số tiền', v: (i) => i.amount, f: fN2, num: true }, { l: 'Ngày quá hạn', v: (i) => i.days, h: (i) => `<span class="${i.days > S.overdueAlertDays ? 'neg' : 'warnc'}">${fN(i.days)}</span>`, num: true }, { l: 'Nhóm', v: (i) => i.bucket }], od, { tall: true, sort: { i: 7, dir: -1 } })}</div>`;
   }
 
   function risk() {
@@ -333,6 +367,7 @@
     return `<div class="panel"><h2>Ngưỡng cảnh báo</h2><p class="muted small">Lưu trong trình duyệt này; chỉ lưu ngưỡng, không lưu dữ liệu.</p>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:10px">
         ${n('sRenew', 'Nhắc tái tục trước (ngày)', S.renewDays || 90, '1')}
+        ${n('sUp', 'Nhắc phí sắp đến hạn trước (ngày)', S.upcomingDays || 30, '1')}
         ${n('sGen', 'Trần line chung (%)', +(S.lineCapGeneral * 100).toFixed(3), '0.05')}
         ${n('sSmall', 'Trần line hãng nhỏ / vùng rủi ro (%)', +(S.lineCapSmall * 100).toFixed(3), '0.05')}
         ${n('sFleet', 'Hãng nhỏ: dưới bao nhiêu tàu', S.smallFleet, '1')}
@@ -374,9 +409,15 @@
     add('Moi gioi', segRows('broker', 'Broker')); add('Kenh', segRows('channel', 'Kênh')); add('Khu vuc', segRows('region', 'Khu vực')); add('Quoc gia', segRows('domicile', 'Quốc gia')); add('Quy hieu luc', segRows('incQ', 'Quý'));
     add('Ky bao cao', state.snaps.map((x) => Object.assign({ UY: x.b.uy, 'Ngày chốt': d(x.b.snap), File: x.b.file }, met(x.s))));
     add('Tai tuc', E.renewals(m, state.settings.renewDays || 90, 30).map((r) => ({ 'Trạng thái': r.status, 'Hết hạn': d(r.p.expC), 'Còn (ngày)': r.daysLeft, UY: r.p.uy, 'PVI ref': r.p.ref, 'Original insured': r.p.insured, Broker: r.p.broker, Kênh: r.p.channel, Leader: r.p.leader, Line: r4(r.p.share), GWP: r2(r.p.gwp), 'Bồi thường': r2(r.p.incurred), 'Kết hợp % GWP': r4(r.comb), 'HĐ tái tục': r.renewed ? `${r.renewed.uy} ${r.renewed.ref}` : '', 'Lưu ý': r.notes.join('; ') })));
+    const cm = (s) => ({ GWP: r2(s.gwp), NWP: r2(s.nwp), 'Phí theo lịch': r2(s.schedAmt), 'Đã đến hạn': r2(s.dueAmt), 'Thực thu': r2(s.collected), 'Thu % GWP': r4(s.collectedPctGwp), 'Thu % NWP': r4(s.collectedPctNwp), 'Thu % đến hạn': r4(s.collectedPctDue), 'Quá hạn': r2(s.overdue), 'Sắp đến hạn': r2(s.upcoming), 'HĐ chưa có lịch': s.noSchedN, 'NWP chưa có lịch': r2(s.noSchedNwp) });
+    const coll = m.uys.map((u) => Object.assign({ 'Nhóm': u }, cm(E.summarize(m, (p) => p.uy === u)))); coll.push(Object.assign({ 'Nhóm': 'Tổng' }, cm(E.summarize(m)))); coll.push({});
+    E.segment(m, 'broker').rows.forEach((r) => coll.push(Object.assign({ 'Nhóm': 'Broker: ' + r.cat }, cm(r.total))));
+    add('Thu phi', coll);
+    add('Sap den han', m.insts.filter((i) => i.daysToDue !== null && i.daysToDue <= (state.settings.upcomingDays || 30)).sort((a, b) => a.due - b.due).map((i) => ({ 'Hạn': d(i.due), 'Còn (ngày)': i.daysToDue, UY: i.uy, 'Original insured': i.insured, Broker: i.broker, 'Kỳ': i.n, 'Số tiền': r2(i.amount) })));
+    add('Qua han', m.insts.filter((i) => i.days > 0).sort((a, b) => b.days - a.days).map((i) => ({ UY: i.uy, 'Original insured': i.insured, Broker: i.broker, 'Kỳ': i.n, 'Hạn': d(i.due), 'Số tiền': r2(i.amount), 'Ngày quá hạn': i.days, 'Nhóm': i.bucket })));
     add('Hop dong', m.policies.map((p) => ({ UY: p.uy, 'PVI ref': p.ref, MRO: p.mro, Broker: p.broker, 'Original insured': p.insured, Region: p.region, Domicile: p.domicile, Channel: p.channel, Leader: p.leader, Status: p.status, 'Hiệu lực': d(p.inc), 'Hết hạn': d(p.exp), 'PVI share': r4(p.share), GWP: r2(p.gwp), NWP: r2(p.nwp), 'Chi phí KT': r2(p.acqUsd), 'CP KT %': r4(p.acq), 'Đã trả': r2(p.paidT), 'Dự phòng': r2(p.os), 'Bồi thường': r2(p.incurred), 'Kết hợp % GWP': p.gwp ? r4((p.acqUsd + p.incurred) / p.gwp) : '', 'Cờ': p.flags.join('; ') })));
     add('Boi thuong', m.claims.map((c) => ({ UY: c.uy, 'Số hồ sơ': c.claimNo, MRO: c.mro, 'Original insured': c.insured, Coverage: c.coverage, 'Loại': c.lossType, 'Ngày tổn thất': c.occ != null ? fD(c.occ) : String(c.occRaw ?? ''), 'Đã trả': r2(c.paidT), 'Dự phòng': r2(c.os), 'Bồi thường': r2(c.incurred), Status: c.status, 'Kiểm tra': c.flag })));
-    add('Ky thanh toan', m.insts.map((i) => ({ UY: i.uy, MRO: i.mro, Broker: i.broker, 'Original insured': i.insured, 'Kỳ': i.n, 'Số tiền': r2(i.amount), 'Hạn': d(i.due), 'Trạng thái': i.paid, 'Ngày quá hạn': i.days, 'Nhóm': i.bucket })));
+    add('Ky thanh toan', m.insts.map((i) => ({ UY: i.uy, MRO: i.mro, Broker: i.broker, 'Original insured': i.insured, 'Kỳ': i.n, 'Số tiền': r2(i.amount), 'Hạn': d(i.due), 'Trạng thái': i.paid, 'Thực thu': r2(i.collected), 'Ngày quá hạn': i.days, 'Nhóm': i.bucket })));
     add('Kiem tra du lieu', m.issues.map((i, k) => ({ '#': k + 1, 'Mức': i.sev, UY: i.uy, Sheet: i.sheet, 'Đối tượng': i.rec, 'Trường': i.field, 'Vấn đề': i.msg, 'Hướng xử lý': i.fix, 'Đã xử lý?': '' })));
     const dt = new Date(m.asOf * E.DAY); const stamp = `${dt.getUTCFullYear()}${String(dt.getUTCMonth() + 1).padStart(2, '0')}${String(dt.getUTCDate()).padStart(2, '0')}`;
     saveFile(`Bao_cao_TBH_hang_khong_${stamp}.xlsx`, new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -426,7 +467,7 @@
     const g = e.target.closest('[data-goto]'); if (g) { go(g.dataset.goto); return; }
     if (e.target.id === 'sSave') {
       const S = state.settings; const v = (id) => parseFloat($('#' + id).value);
-      S.renewDays = v('sRenew') || 90; S.lineCapGeneral = v('sGen') / 100; S.lineCapSmall = v('sSmall') / 100; S.smallFleet = v('sFleet'); S.leaderCap = v('sLead') / 100; S.minPremium = v('sMin'); S.overdueAlertDays = v('sOd');
+      S.renewDays = v('sRenew') || 90; S.upcomingDays = v('sUp') || 30; S.lineCapGeneral = v('sGen') / 100; S.lineCapSmall = v('sSmall') / 100; S.smallFleet = v('sFleet'); S.leaderCap = v('sLead') / 100; S.minPremium = v('sMin'); S.overdueAlertDays = v('sOd');
       S.highRiskCountries = $('#sHigh').value.split(',').map((s) => s.trim()).filter(Boolean);
       saveSettings(); recompute(); toast('Đã áp dụng ngưỡng mới');
     }
@@ -436,6 +477,8 @@
     const id = e.target.id; const v = e.target.value;
     if (id.startsWith('scope-')) { state.scope[id.slice(6)] = v; render(); }
     if (id === 'regionDim') { state.regionDim = v; render(); }
+    if (id === 'collDim') { state.collDim = v; render(); }
+    if (id === 'upDays') { state.settings.upcomingDays = +v; saveSettings(); recompute(); }
     if (id === 'renewDays') { state.settings.renewDays = +v; saveSettings(); renderTabs(); render(); }
     if (id === 'cUy') { state.claimF.uy = v; render(); }
     if (id === 'cSt') { state.claimF.st = v; render(); }

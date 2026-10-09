@@ -79,3 +79,14 @@ const rn = E.renewals(mr, 30, 0);
 assert.ok(rn.some((r) => r.p.insured === 'Alpha Air' && r.daysLeft === 25 && !r.renewed));
 assert.strictEqual(E.insuredKey('PT Mongolian Airways Cargo LLC'), E.insuredKey('Mongolian Airways Cargo'));
 console.log('OK – kiểm thử v2 đạt');
+
+// v3: thu phí
+const mc = E.build([b], { asOf: E.parseDate('2025-07-25'), upcomingDays: 30 });
+const sc = E.summarize(mc);
+assert.strictEqual(sc.collected, 3750);
+assert.strictEqual(sc.upcoming, 3750);          // kỳ 2 hạn 10/08/2025, còn 16 ngày
+assert.strictEqual(sc.nUpcoming, 1);
+assert.strictEqual(sc.overdue, 0);
+assert.ok(Math.abs(sc.collectedPctGwp - 3750 / 16000) < 1e-12);
+assert.strictEqual(sc.noSchedN, 1);               // Beta Cargo chưa có lịch
+console.log('OK – kiểm thử thu phí đạt');

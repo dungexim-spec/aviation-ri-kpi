@@ -19,6 +19,7 @@
     leaderCap: 0.30,            // tỷ trọng GWP tối đa cho một leader trong một UY
     minPremium: 2500,           // GWP tối thiểu mỗi line
     overdueAlertDays: 90,
+    upcomingDays: 30,           // nhắc kỳ phí sắp đến hạn trong số ngày này
     highRiskCountries: ['Syria', 'Ukraine', 'Libya', 'Iraq', 'Myanmar', 'Mali', 'Afghanistan', 'Iran', 'Yemen', 'Sudan', 'Russia', 'Belarus', 'Venezuela', 'North Korea', 'Cuba'],
     regionMap: { 'Asia': 'Asia Pacific RIM', 'LATAM': 'Americas', 'South America': 'Americas' },
     leaderMap: { 'TMK': 'Tokio Marine Kiln' },
@@ -264,6 +265,10 @@
           o.isPaid = /^paid$/i.test(paid);
           o.days = !o.isPaid && due !== null && due < asOf ? asOf - due : 0;
           o.bucket = o.days === 0 ? '' : o.days <= 30 ? '0-30' : o.days <= 90 ? '31-90' : o.days <= 180 ? '91-180' : o.days <= 365 ? '181-365' : 'Trên 365';
+          // Thực thu: số thực thu ghi nhận; kỳ ghi "Paid" mà chưa nhập số thực thu thì lấy số tiền kỳ
+          o.collected = o.isPaid ? (o.actual > 0 ? o.actual : amount) : 0;
+          o.isDue = due !== null && due <= asOf;
+          o.daysToDue = !o.isPaid && due !== null && due >= asOf ? due - asOf : null;
           list.push(o);
         }
       });
@@ -312,6 +317,21 @@
       boundLate: bp.filter((p) => p.flags.includes('Bind sau hiệu lực')).length,
       cancelled: model.policies.filter((p) => f(p) && /cancel/i.test(p.status)).length,
     };
+    // Thu phí
+    const up = model.settings.upcomingDays || 30;
+    const sched = new Set(ins.map((i) => i.key));
+    s.schedAmt = sum(ins, (i) => i.amount);
+    s.dueAmt = sum(ins.filter((i) => i.isDue), (i) => i.amount);
+    s.collected = sum(ins, (i) => i.collected);
+    s.collectedPctGwp = s.gwp > 0 ? s.collected / s.gwp : null;
+    s.collectedPctNwp = s.nwp > 0 ? s.collected / s.nwp : null;
+    s.collectedPctDue = s.dueAmt > 0 ? sum(ins.filter((i) => i.isDue), (i) => i.collected) / s.dueAmt : null;
+    s.upcoming = sum(ins.filter((i) => i.daysToDue !== null && i.daysToDue <= up), (i) => i.amount);
+    s.nUpcoming = ins.filter((i) => i.daysToDue !== null && i.daysToDue <= up).length;
+    s.nOverdue = ins.filter((i) => i.days > 0).length;
+    s.overduePctNwp = s.nwp > 0 ? s.overdue / s.nwp : null;
+    s.noSchedN = bp.filter((p) => !sched.has(p.key)).length;
+    s.noSchedNwp = sum(bp.filter((p) => !sched.has(p.key)), (p) => p.nwp);
     s.acq = s.gwp > 0 ? 1 - s.earning / s.gwp : null;
     s.earnedPct = s.earning > 0 ? s.ep / s.earning : null;
     s.lrEP = s.ep > 0 ? s.incurred / s.ep : null;
