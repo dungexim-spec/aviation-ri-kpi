@@ -1,0 +1,8 @@
+{
+  "name": "aviation-ri-kpi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bảng chỉ số danh mục nhận tái bảo hiểm hàng không – web app tĩnh, xử lý file Excel ngay trên trình duyệt",
+  "scripts": { "test": "node tests/engine.test.js" },
+  "devDependencies": { "xlsx": "0.18.5" }
+}

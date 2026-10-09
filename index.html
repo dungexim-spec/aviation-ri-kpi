@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bảng chỉ số TBH hàng không</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="eyebrow">Nhận tái bảo hiểm hàng không</div>
+      <h1>Bảng chỉ số TBH hàng không</h1>
+      <div class="sub">Tải file theo dõi UY (định dạng Policy · Risk · Premium · Claim · Installment) để nhận báo cáo chỉ số, phân khúc, tuổi nợ và lỗi dữ liệu.</div>
+    </div>
+    <span class="lock" title="File được đọc và tính toán ngay trong trình duyệt của bạn. Không có máy chủ nào nhận dữ liệu.">🔒 Dữ liệu chỉ xử lý trên máy bạn</span>
+  </header>
+
+  <section class="panel databar" aria-label="Dữ liệu đầu vào">
+    <div>
+      <div class="drop" id="drop">
+        <button class="primary" id="pick">Chọn file Excel</button>
+        <span class="muted small">hoặc kéo thả vào đây · chọn được nhiều file, mỗi file một năm nghiệp vụ (UY)</span>
+        <input type="file" id="file" accept=".xlsx,.xlsm,.xls" multiple hidden>
+      </div>
+      <div class="files" id="files"></div>
+      <div id="loadWarn"></div>
+    </div>
+    <div class="controls">
+      <label class="fld" for="asof">Ngày báo cáo<input type="date" id="asof"></label>
+      <button id="export" disabled>Xuất báo cáo Excel</button>
+      <button class="ghost" id="template">Tải file mẫu</button>
+    </div>
+  </section>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <main id="view"></main>
+
+  <footer>
+    Phí đã hưởng tính pro-rata theo ngày đến ngày báo cáo. Loss ratio = PVI incurred (đã trả + dự phòng) / phí đã hưởng, chưa gồm IBNR, hoa hồng MGA và chi phí treaty.
+    Hợp đồng có ngày hết hạn không sau ngày hiệu lực được tạm tính 12 tháng.
+  </footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

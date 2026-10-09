@@ -1,0 +1,7 @@
+# Không bao giờ commit dữ liệu thật
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+node_modules/
+.DS_Store
