@@ -63,3 +63,19 @@ assert.strictEqual(E.fmtDate(E.parseDate('05/10/2026')), '05/10/2026');
 assert.strictEqual(E.parseDate('2026-21-08'), null);
 assert.strictEqual(E.fmtDate(E.parseDate(46300)), E.fmtDate(E.parseDate('2026-10-05')));
 console.log('OK – tất cả kiểm thử engine đều đạt');
+
+// v2: chi phí khai thác, kết hợp, kỳ báo cáo, tái tục
+assert.strictEqual(s.acqUsd, 16000 - (7500 + 4460));
+assert.ok(Math.abs(s.combinedPct - (s.acqUsd + 35000) / 16000) < 1e-12);
+assert.strictEqual(s.brokSmbUsd + s.otherCostUsd, s.acqUsd);
+assert.strictEqual(E.fmtDate(E.snapFromFilename('UY_2_update_05102026.xlsx')), '05/10/2026');
+assert.strictEqual(E.quarterLabel(E.parseDate('2025-11-19')), '2025-Q4');
+const seg = E.segment(m, 'broker');
+assert.strictEqual(seg.rows.length, 2);
+assert.strictEqual(seg.all.gwp, 16000);
+// Alpha Air hết hạn 09/01/2026; tại 15/12/2025 → nằm trong 30 ngày tới
+const mr = E.build([b], { asOf: E.parseDate('2025-12-15') });
+const rn = E.renewals(mr, 30, 0);
+assert.ok(rn.some((r) => r.p.insured === 'Alpha Air' && r.daysLeft === 25 && !r.renewed));
+assert.strictEqual(E.insuredKey('PT Mongolian Airways Cargo LLC'), E.insuredKey('Mongolian Airways Cargo'));
+console.log('OK – kiểm thử v2 đạt');

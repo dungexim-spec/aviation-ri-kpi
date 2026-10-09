@@ -116,3 +116,31 @@ code { font-family: var(--f-data); font-size: 12px; background: var(--surface-2)
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 10; }
 footer { margin-top: 32px; font-size: 12px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- v2: chỉ số chi phí/bồi thường/kết hợp, tái tục, kỳ báo cáo ---- */
+:root { --c-acq: var(--s1); --c-clm: var(--s2); }
+.chip.old { opacity: .6; }
+.chip input[type="date"] { width: 128px; font: inherit; font-size: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 4px; background: var(--surface-2); color: var(--ink); }
+nav.tabs .count.warn { background: var(--warn-bg); color: var(--warn); }
+.banner { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; border-color: var(--warn); background: var(--warn-bg); }
+.banner > div { min-width: 0; flex: 1 1 320px; }
+.kpi .v .pct { margin-left: auto; font-size: 13px; color: var(--ink-2); }
+tr.sec td { background: var(--accent-soft); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+tr.b td { font-weight: 600; }
+.neg { color: var(--crit); font-weight: 600; }
+.warnc { color: var(--warn); font-weight: 600; }
+th.grp { text-align: center; border-left: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.cbars { display: grid; grid-template-columns: minmax(90px, 170px) minmax(0, 1fr); gap: 7px 12px; align-items: center; margin-top: 8px; }
+.cbars .cat { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctrack { position: relative; min-width: 0; }
+.ctrack .ref { position: absolute; top: -3px; bottom: -3px; border-left: 1.5px dashed var(--muted); z-index: 1; }
+.cstack { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.cstack .a, .cstack .c { height: 12px; min-width: 1px; }
+.cstack .a { background: var(--c-acq); }
+.cstack .c { background: var(--c-clm); border-radius: 0 4px 4px 0; }
+.cstack .a:hover, .cstack .c:hover { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cval { position: relative; z-index: 2; background: var(--surface); padding: 0 4px; font-family: var(--f-data); font-size: 11.5px; margin-left: 6px; white-space: nowrap; }
+.sw.line { width: 0; height: 12px; border-left: 1.5px dashed var(--muted); border-radius: 0; }
+.tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.tile .lab { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.tile .big { font-size: 24px; font-weight: 500; margin-top: 2px; }

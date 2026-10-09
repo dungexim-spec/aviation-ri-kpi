@@ -80,6 +80,22 @@
     const m = String(fn).match(/UY[\s_-]*(\d{1,4})/i);
     return m ? 'UY' + m[1] : String(fn).replace(/\.[^.]+$/, '').slice(0, 20);
   }
+  // Ngày chốt số liệu (kỳ báo cáo) từ tên file: ..._update_05102026 → 05/10/2026 (ddmmyyyy), hoặc yyyymmdd / yyyy-mm-dd
+  function snapFromFilename(fn) {
+    const s = String(fn);
+    let m = s.match(/update[_\s-]*(\d{2})(\d{2})(\d{4})/i);
+    if (m) { const d = ymd(+m[3], +m[2], +m[1]); if (d !== null) return d; }
+    m = s.match(/(20\d{2})[-_]?(\d{2})[-_]?(\d{2})/);
+    if (m) { const d = ymd(+m[1], +m[2], +m[3]); if (d !== null) return d; }
+    m = s.match(/(\d{2})(\d{2})(20\d{2})/);
+    if (m) { const d = ymd(+m[3], +m[2], +m[1]); if (d !== null) return d; }
+    return null;
+  }
+  function quarterLabel(d) {
+    if (d === null || d === undefined) return '(không rõ)';
+    const dt = new Date(d * DAY);
+    return dt.getUTCFullYear() + '-Q' + (Math.floor(dt.getUTCMonth() / 3) + 1);
+  }
 
   // ---------- Đọc một workbook ----------
   function readWorkbook(XLSX, wb, uy) {
@@ -158,6 +174,8 @@
       o.ep = o.earning * o.earnPct;
       o.cap = o.share * (o.hull + o.csl);
       o.acq = o.gwp > 0 ? 1 - o.earning / o.gwp : null;
+      o.acqUsd = o.gwp - o.earning;
+      o.incQ = quarterLabel(o.inc);
       o.bound_ = o.status === 'Bound';
       o.highRisk = high.has(norm(o.domicile));
       o.smallOp = o.ac > 0 && o.ac < S.smallFleet;
@@ -298,24 +316,71 @@
     s.earnedPct = s.earning > 0 ? s.ep / s.earning : null;
     s.lrEP = s.ep > 0 ? s.incurred / s.ep : null;
     s.lrFull = s.earning > 0 ? s.incurred / s.earning : null;
-    s.combined = s.gwp > 0 ? (s.incurred + (s.gwp - s.earning)) / s.gwp : null;
+    // Chi phí khai thác = GWP − net earning (brokerage, SMB, facility fee, khấu trừ khác, quỹ)
+    s.acqUsd = s.gwp - s.earning;
+    s.brokSmbUsd = s.gwp - s.nwp;          // phần trừ từ GWP xuống NWP (brokerage + SMB …)
+    s.otherCostUsd = s.nwp - s.earning;    // facility fee, khấu trừ khác, quỹ
+    s.acqPct = s.gwp > 0 ? s.acqUsd / s.gwp : null;
+    s.paidPct = s.gwp > 0 ? s.paid / s.gwp : null;
+    s.osPct = s.gwp > 0 ? s.os / s.gwp : null;
+    s.claimsPct = s.gwp > 0 ? s.incurred / s.gwp : null;
+    s.combinedUsd = s.acqUsd + s.incurred;
+    s.combinedPct = s.gwp > 0 ? s.combinedUsd / s.gwp : null;
+    s.resultUsd = s.gwp - s.combinedUsd;   // kết quả trước chi phí quản lý, IBNR và tái bảo hiểm
+    s.combined = s.combinedPct;
     const top2 = bp.map((p) => p.incurred).sort((a, b) => b - a).slice(0, 2);
     s.lrExTop2 = s.ep > 0 ? (s.incurred - sum(top2)) / s.ep : null;
     return s;
   }
 
-  function segment(model, dim) {
-    const bp = model.policies.filter((p) => p.bound_);
+  // So sánh theo một chiều (broker, channel, region…). baseFilter giới hạn phạm vi (ví dụ một UY).
+  function segment(model, dim, baseFilter) {
+    const bf = baseFilter || (() => true);
+    const bp = model.policies.filter((p) => p.bound_ && bf(p));
     const cats = [...new Set(bp.map((p) => p[dim] || '(trống)'))];
+    const all = summarize(model, bf);
     const rows = cats.map((cat) => {
       const r = { cat, byUy: {} };
-      model.uys.forEach((uy) => { r.byUy[uy] = summarize(model, (p) => p.uy === uy && (p[dim] || '(trống)') === cat); });
-      r.total = summarize(model, (p) => (p[dim] || '(trống)') === cat);
+      model.uys.forEach((uy) => { r.byUy[uy] = summarize(model, (p) => bf(p) && p.uy === uy && (p[dim] || '(trống)') === cat); });
+      r.total = summarize(model, (p) => bf(p) && (p[dim] || '(trống)') === cat);
+      r.shareGwp = all.gwp > 0 ? r.total.gwp / all.gwp : null;
       return r;
     });
     rows.sort((a, b) => b.total.gwp - a.total.gwp);
-    return rows;
+    return { rows, all };
   }
 
-  return { DEFAULT_SETTINGS, readWorkbook, build, summarize, segment, parseDate, fmtDate, todayDay, uyFromFilename, DAY };
+  // ---------- Tái tục ----------
+  const STOP = new Set(['pt', 'the', 'co', 'ltd', 'llc', 'jsc', 'inc', 'limited', 'company', 'and', 'or', 'of', 'a', 'b', 'c', 'd', 'i', 'ii', 'iii', 'pvt', 'plc', 'sa', 'corp', 'corporation', 'group', 'ojsc', 'cjsc', 'fze', 'fzc', 'tbk', 'persero']);
+  function insuredKey(name) {
+    const w = norm(name).replace(/\([^)]{0,6}\)/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((x) => x && !STOP.has(x));
+    return w.slice(0, 2).join(' ');
+  }
+  // Hợp đồng hết hạn trong [ngày báo cáo − lookback, ngày báo cáo + days]; tự nhận diện hợp đồng tái tục đã có trong dữ liệu.
+  function renewals(model, days, lookback) {
+    const base = model.asOf; const lb = lookback == null ? 30 : lookback;
+    const bound = model.policies.filter((p) => p.bound_ && p.expC !== null);
+    const list = bound.filter((p) => p.expC >= base - lb && p.expC <= base + days && !/Endt|\(AP /i.test(p.insured));
+    return list.map((p) => {
+      const k = insuredKey(p.insured);
+      const ren = bound.find((q) => q !== p && q.inc !== null && insuredKey(q.insured) === k && q.inc >= p.expC - 45 && q.inc <= p.expC + 45);
+      const daysLeft = p.expC - base;
+      const lr = p.ep > 0 ? p.incurred / p.ep : null;
+      const comb = p.gwp > 0 ? (p.acqUsd + p.incurred) / p.gwp : null;
+      const notes = [];
+      if (comb !== null && comb > 1) notes.push('Kết hợp > 100%: xem lại phí/điều kiện');
+      else if (comb !== null && comb > 0.8) notes.push('Kết hợp > 80%');
+      if (p.flags.some((f) => f.startsWith('Line '))) notes.push('Line vượt trần');
+      if (p.highRisk) notes.push('Vùng nhạy cảm: sàng lọc lại cấm vận');
+      const od = model.insts.filter((i) => i.key === p.key && i.days > 0).reduce((a, i) => a + i.amount, 0);
+      if (od > 0) notes.push(`Còn ${Math.round(od).toLocaleString('en')} USD phí quá hạn`);
+      return {
+        p, daysLeft, renewed: ren || null, lr, comb,
+        status: ren ? 'Đã có HĐ tái tục' : daysLeft < 0 ? 'Đã hết hạn, chưa thấy tái tục' : daysLeft <= 30 ? 'Trong 30 ngày' : daysLeft <= 60 ? 'Trong 31–60 ngày' : 'Trong 61–' + days + ' ngày',
+        notes,
+      };
+    }).sort((a, b) => a.daysLeft - b.daysLeft);
+  }
+
+  return { DEFAULT_SETTINGS, readWorkbook, build, summarize, segment, renewals, insuredKey, parseDate, fmtDate, todayDay, uyFromFilename, snapFromFilename, quarterLabel, DAY };
 });
