@@ -16,7 +16,7 @@
 
   const state = {
     books: [], main: null, snaps: [], tab: 'overview', settings: loadSettings(), asOfManual: false,
-    scope: { broker: '', channel: '', region: '', coll: '' }, collDim: 'broker', regionDim: 'region', renewDays: 90,
+    scope: { broker: '', channel: '', region: '', coll: '' }, collDim: 'broker', renDim: 'broker', regionDim: 'region', renewDays: 90,
     claimF: { uy: '', st: '', flag: '' }, issueF: { sev: '', uy: '', q: '' },
   };
 
@@ -159,6 +159,9 @@
       ${sec('Bồi thường')}${row('Đã trả', (s) => fN(s.paid))}${row('Đã trả % GWP', (s) => fP(s.paidPct))}${row('Dự phòng', (s) => fN(s.os))}${row('Dự phòng % GWP', (s) => fP(s.osPct))}${row('Bồi thường (đã trả + dự phòng)', (s) => fN(s.incurred), 'b')}${row('Bồi thường % GWP', (s) => fP(s.claimsPct), 'b')}
       ${sec('Kết hợp chi phí khai thác và bồi thường')}${row('Kết hợp', (s) => fN(s.combinedUsd), 'b')}${row('Tỷ lệ kết hợp % GWP', (s) => ratioCell(s.combinedPct), 'b')}${row('Còn lại sau chi phí KT và bồi thường', (s) => fN(s.resultUsd))}
       ${sec('Thu phí')}${row('Phí theo lịch thanh toán', (s) => fN(s.schedAmt))}${row('Thực thu', (s) => fN(s.collected), 'b')}${row('Thực thu % GWP', (s) => fP(s.collectedPctGwp), 'b')}${row('Thực thu % NWP', (s) => fP(s.collectedPctNwp))}${row('Phí quá hạn chưa thu', (s) => fN(s.overdue))}${row(`Phí đến hạn trong ${state.settings.upcomingDays || 30} ngày tới`, (s) => fN(s.upcoming))}${row('NWP chưa có lịch thanh toán', (s) => fN(s.noSchedNwp))}
+      ${sec('Tái tục')}${(() => { const st = E.renewalStats(m); const by = Object.fromEntries(st.map((x) => [x.to, x])); const cell = (c, f) => { if (c === 'Tổng') { if (!st.length) return '–'; const t = st.reduce((a, x) => ({ r: a.r + x.nRenewed, d: a.d + x.nDue, n: a.n + x.nNew, nx: a.nx + x.nNext, gr: a.gr + x.gwpRenewedPrev, gd: a.gd + x.gwpDue }), { r: 0, d: 0, n: 0, nx: 0, gr: 0, gd: 0 }); return f({ nRenewed: t.r, nDue: t.d, ratioN: t.d ? t.r / t.d : null, ratioG: t.gd ? t.gr / t.gd : null, nNew: t.n, nNext: t.nx }); } return by[c] ? f(by[c]) : '–'; };
+        const r2 = (l, f, cls) => `<tr class="${cls || ''}"><td>${l}</td>${cols.map((c) => `<td class="r">${cell(c, f)}</td>`).join('')}</tr>`;
+        return r2('Đơn tái tục / đơn năm trước đã đến hạn', (x) => `${x.nRenewed}/${x.nDue}`) + r2('Tỷ lệ tái tục (số đơn)', (x) => fP(x.ratioN), 'b') + r2('Tỷ lệ tái tục (GWP)', (x) => fP(x.ratioG)) + r2('Đơn mới / tổng số đơn', (x) => `${x.nNew}/${x.nNext}`); })()}
       ${sec('Tham khảo')}${row('Phí đã hưởng (net earning pro-rata)', (s) => fN(s.ep))}${row('Loss ratio / phí đã hưởng', (s) => fP(s.lrEP))}${row('Số hồ sơ bồi thường', (s) => fN(s.nClaims))}
       </tbody></table></div>`;
     const rn = E.renewals(m, state.settings.renewDays || 90, 30);
@@ -255,6 +258,38 @@
       <div class="section"><h2>Theo quý hiệu lực của hợp đồng</h2>${table(qcols, q.rows, { foot: true, groups: GROUPS('Quý', 1) })}</div>`;
   }
 
+  // Tỷ lệ tái tục: đơn UY trước đã đến hạn có tái tục sang UY sau
+  function renewalRatio() {
+    const m = state.main; const stats = E.renewalStats(m);
+    if (!stats.length) return `<div class="panel"><h2>Tỷ lệ tái tục</h2><p class="muted small">Cần tải ít nhất hai năm nghiệp vụ liên tiếp (ví dụ UY1 và UY2) để tính số đơn tái tục trên tổng số đơn đến hạn.</p></div>`;
+    const dim = state.renDim; const dimLab = { broker: 'Môi giới (năm trước)', channel: 'Kênh', region: 'Khu vực', domicile: 'Quốc gia', leader: 'Leader' }[dim];
+    return stats.map((st) => {
+      const groups = {};
+      st.rows.forEach((r) => { const k = r.p[dim] || '(trống)'; const g = groups[k] = groups[k] || { cat: k, nDue: 0, nRen: 0, gDue: 0, gRenPrev: 0, gRenNew: 0, chg: 0 }; g.nDue++; g.gDue += r.p.gwp; if (r.q) { g.nRen++; g.gRenPrev += r.p.gwp; g.gRenNew += r.q.gwp; if (r.q.broker !== r.p.broker) g.chg++; } });
+      const rows = Object.values(groups).map((g) => Object.assign(g, { rN: g.nDue ? g.nRen / g.nDue : null, rG: g.gDue ? g.gRenPrev / g.gDue : null, pc: g.gRenPrev ? g.gRenNew / g.gRenPrev - 1 : null }));
+      const lost = st.rows.filter((r) => !r.q).map((r) => r.p);
+      const chgB = st.rows.filter((r) => r.q && r.q.broker !== r.p.broker);
+      const tile = (l, v, sub) => `<div class="panel tile"><div class="lab">${l}</div><div class="big num">${v}</div><div class="small muted">${sub}</div></div>`;
+      const pctCell = (v) => !fin(v) ? '–' : `<span class="${v < 0.5 ? 'neg' : v < 0.7 ? 'warnc' : ''}">${fP(v)}</span>`;
+      return `<div class="panel"><h2>Tỷ lệ tái tục ${esc(st.from)} → ${esc(st.to)}</h2>
+        <p class="muted small">Đơn ${esc(st.from)} đã hết hạn đến ${fD(m.asOf)} (không tính đơn huỷ và sửa đổi bổ sung) có hợp đồng cùng insured trong ${esc(st.to)}, hiệu lực trong ±90 ngày quanh ngày hết hạn.${st.nNotDue ? ` Còn ${st.nNotDue} đơn chưa đến hạn, chưa tính.` : ''}</p>
+        <div class="grid tiles" style="margin-top:10px">
+          ${tile('Đơn tái tục / đơn đến hạn', `${st.nRenewed}/${st.nDue}`, `${fP(st.ratioN)} số đơn · ${fP(st.ratioG)} GWP`)}
+          ${tile('Không tái tục', fN(st.nLost), `GWP năm trước ${fN(st.gwpLost)} USD`)}
+          ${tile('Phí đơn tái tục', fPP(st.premChange).replace(' đ%', '%'), `${fN(st.gwpRenewedPrev)} → ${fN(st.gwpRenewedNew)} USD`)}
+          ${tile(`Đơn mới trong ${esc(st.to)}`, `${st.nNew}/${st.nNext}`, `${fP(st.newShareN)} số đơn · ${fP(st.newShareG)} GWP`)}
+          ${tile('Tái tục qua broker khác', fN(chgB.length), chgB.slice(0, 3).map((r) => `${r.p.insured.slice(0, 16)}: ${r.p.broker}→${r.q.broker}`).join(' · ') || 'không có')}
+        </div>
+        <div class="toolbar" style="margin-top:14px"><h3 style="margin:0">Theo</h3><label class="fld" for="renDim"><select id="renDim">${[['broker', 'Môi giới'], ['channel', 'Kênh'], ['region', 'Khu vực'], ['domicile', 'Quốc gia'], ['leader', 'Leader']].map(([k, l]) => `<option value="${k}" ${k === dim ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        ${table([{ l: dimLab, v: (r) => r.cat, wrap: true }, { l: 'Đơn đến hạn', v: (r) => r.nDue, f: fN, num: true, t: () => fN(st.nDue) }, { l: 'Đã tái tục', v: (r) => r.nRen, f: fN, num: true, t: () => fN(st.nRenewed) }, { l: 'Tỷ lệ số đơn', v: (r) => r.rN, h: (r) => pctCell(r.rN), num: true, t: () => fP(st.ratioN) },
+          { l: 'GWP đến hạn', v: (r) => r.gDue, f: fN, num: true, t: () => fN(st.gwpDue) }, { l: 'GWP đã tái tục (năm trước)', v: (r) => r.gRenPrev, f: fN, num: true, t: () => fN(st.gwpRenewedPrev) }, { l: 'Tỷ lệ GWP', v: (r) => r.rG, h: (r) => pctCell(r.rG), num: true, t: () => fP(st.ratioG) },
+          { l: `GWP tái tục (${st.to})`, v: (r) => r.gRenNew, f: fN, num: true, t: () => fN(st.gwpRenewedNew) }, { l: 'Thay đổi phí', v: (r) => r.pc, f: (v) => fPP(v).replace(' đ%', '%'), num: true, t: () => fPP(st.premChange).replace(' đ%', '%') }, { l: 'Đổi broker', v: (r) => r.chg, f: fN, num: true }], rows, { foot: true, sort: { i: 1, dir: -1 } })}
+        <h3 style="margin-top:14px">Đơn không tái tục (${lost.length})</h3>
+        ${table([{ l: 'Original insured', v: (p) => p.insured, wrap: true }, { l: 'Broker', v: (p) => p.broker }, { l: 'Kênh', v: (p) => p.channel }, { l: 'Quốc gia', v: (p) => p.domicile }, { l: 'Hết hạn', v: (p) => p.expC, f: fD }, { l: 'GWP', v: (p) => p.gwp, f: fN, num: true }, { l: 'Bồi thường', v: (p) => p.incurred, f: fN, num: true }, { l: 'Kết hợp % GWP', v: (p) => p.gwp ? (p.acqUsd + p.incurred) / p.gwp : null, h: (p) => ratioCell(p.gwp ? (p.acqUsd + p.incurred) / p.gwp : null), num: true }], lost, { tall: true, sort: { i: 5, dir: -1 } })}
+        <p class="muted small" style="margin-top:6px">Kết hợp thấp nghĩa là mất đơn có lãi, cần tìm hiểu lý do; kết hợp cao thì việc không tái tục có thể là chủ động.</p></div>`;
+    }).join('');
+  }
+
   function renew() {
     const m = state.main; const days = state.settings.renewDays || 90;
     const rn = E.renewals(m, days, 30);
@@ -271,8 +306,10 @@
       { l: 'HĐ tái tục', v: (r) => r.renewed ? r.renewed.uy + ' ' + r.renewed.ref : '', h: (r) => r.renewed ? `${esc(r.renewed.uy)} · ${esc(r.renewed.ref)} · từ ${fD(r.renewed.inc)}` : '' },
       { l: 'Lưu ý khi tái tục', v: (r) => r.notes.join('; '), wrap: true },
     ];
-    return `<div class="toolbar"><label class="fld" for="renewDays">Hết hạn trong<select id="renewDays">${[30, 60, 90, 120, 180].map((d) => `<option value="${d}" ${d === days ? 'selected' : ''}>${d} ngày tới</option>`).join('')}</select></label>
-        <span class="muted small">Tính từ ngày báo cáo ${fD(m.asOf)}; gồm cả hợp đồng đã hết hạn trong 30 ngày qua. App tự tìm hợp đồng tái tục cùng tên insured có hiệu lực quanh ngày hết hạn (±45 ngày) trong các file đã tải.</span></div>
+    return `${renewalRatio()}
+      <h2 style="margin-top:24px">Hợp đồng sắp hết hạn</h2>
+      <div class="toolbar"><label class="fld" for="renewDays">Hết hạn trong<select id="renewDays">${[30, 60, 90, 120, 180].map((d) => `<option value="${d}" ${d === days ? 'selected' : ''}>${d} ngày tới</option>`).join('')}</select></label>
+        <span class="muted small">Tính từ ngày báo cáo ${fD(m.asOf)}; gồm cả hợp đồng đã hết hạn trong 30 ngày qua. App tự tìm hợp đồng tái tục cùng tên insured có hiệu lực trong ±90 ngày quanh ngày hết hạn, trong các file đã tải.</span></div>
       <div class="grid tiles">${tiles.map(([l, arr]) => `<div class="panel tile"><div class="lab">${l}</div><div class="big num">${arr.length}</div><div class="small muted">GWP ${fN(sumG(arr))} USD</div></div>`).join('')}</div>
       <div class="section">${table(cols, rn, { tall: true, sort: { i: 0, dir: 1 } })}</div>`;
   }
@@ -413,6 +450,11 @@
     const coll = m.uys.map((u) => Object.assign({ 'Nhóm': u }, cm(E.summarize(m, (p) => p.uy === u)))); coll.push(Object.assign({ 'Nhóm': 'Tổng' }, cm(E.summarize(m)))); coll.push({});
     E.segment(m, 'broker').rows.forEach((r) => coll.push(Object.assign({ 'Nhóm': 'Broker: ' + r.cat }, cm(r.total))));
     add('Thu phi', coll);
+    const rs = E.renewalStats(m); const rr = [];
+    rs.forEach((st) => { rr.push({ 'Kỳ': `${st.from} → ${st.to}`, 'Đơn đến hạn': st.nDue, 'Đã tái tục': st.nRenewed, 'Tỷ lệ số đơn': r4(st.ratioN), 'GWP đến hạn': r2(st.gwpDue), 'GWP đã tái tục (năm trước)': r2(st.gwpRenewedPrev), 'Tỷ lệ GWP': r4(st.ratioG), 'GWP tái tục (năm sau)': r2(st.gwpRenewedNew), 'Thay đổi phí': r4(st.premChange), 'Đơn mới': st.nNew, 'Tổng đơn năm sau': st.nNext, 'GWP đơn mới': r2(st.gwpNew) }); });
+    add('Ty le tai tuc', rr);
+    const rl = []; rs.forEach((st) => st.rows.forEach((r) => rl.push({ 'Kỳ': `${st.from} → ${st.to}`, 'Trạng thái': r.q ? 'Đã tái tục' : 'Không tái tục', 'Original insured': r.p.insured, Broker: r.p.broker, 'Hết hạn': d(r.p.expC), 'GWP năm trước': r2(r.p.gwp), 'HĐ tái tục': r.q ? r.q.ref : '', 'Broker mới': r.q ? r.q.broker : '', 'GWP tái tục': r.q ? r2(r.q.gwp) : '' })));
+    add('Chi tiet tai tuc', rl);
     add('Sap den han', m.insts.filter((i) => i.daysToDue !== null && i.daysToDue <= (state.settings.upcomingDays || 30)).sort((a, b) => a.due - b.due).map((i) => ({ 'Hạn': d(i.due), 'Còn (ngày)': i.daysToDue, UY: i.uy, 'Original insured': i.insured, Broker: i.broker, 'Kỳ': i.n, 'Số tiền': r2(i.amount) })));
     add('Qua han', m.insts.filter((i) => i.days > 0).sort((a, b) => b.days - a.days).map((i) => ({ UY: i.uy, 'Original insured': i.insured, Broker: i.broker, 'Kỳ': i.n, 'Hạn': d(i.due), 'Số tiền': r2(i.amount), 'Ngày quá hạn': i.days, 'Nhóm': i.bucket })));
     add('Hop dong', m.policies.map((p) => ({ UY: p.uy, 'PVI ref': p.ref, MRO: p.mro, Broker: p.broker, 'Original insured': p.insured, Region: p.region, Domicile: p.domicile, Channel: p.channel, Leader: p.leader, Status: p.status, 'Hiệu lực': d(p.inc), 'Hết hạn': d(p.exp), 'PVI share': r4(p.share), GWP: r2(p.gwp), NWP: r2(p.nwp), 'Chi phí KT': r2(p.acqUsd), 'CP KT %': r4(p.acq), 'Đã trả': r2(p.paidT), 'Dự phòng': r2(p.os), 'Bồi thường': r2(p.incurred), 'Kết hợp % GWP': p.gwp ? r4((p.acqUsd + p.incurred) / p.gwp) : '', 'Cờ': p.flags.join('; ') })));
@@ -478,6 +520,7 @@
     if (id.startsWith('scope-')) { state.scope[id.slice(6)] = v; render(); }
     if (id === 'regionDim') { state.regionDim = v; render(); }
     if (id === 'collDim') { state.collDim = v; render(); }
+    if (id === 'renDim') { state.renDim = v; render(); }
     if (id === 'upDays') { state.settings.upcomingDays = +v; saveSettings(); recompute(); }
     if (id === 'renewDays') { state.settings.renewDays = +v; saveSettings(); renderTabs(); render(); }
     if (id === 'cUy') { state.claimF.uy = v; render(); }

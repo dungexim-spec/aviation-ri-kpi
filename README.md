@@ -6,7 +6,7 @@ Tải lên các file theo dõi `UY_x_update_ddmmyyyy.xlsx`, app trả về ngay:
 - **Tổng quan**: GWP, NWP; chi phí khai thác (USD, % GWP); bồi thường đã trả, dự phòng, tổng (USD, % GWP); tỷ lệ kết hợp chi phí khai thác + bồi thường (USD, % GWP); nhắc tái tục; các điểm cần chú ý.
 - **Môi giới**, **Kênh khai thác**, **Khu vực** (theo vùng hoặc quốc gia): cùng bộ chỉ số trên cho từng nhóm, biểu đồ tỷ lệ kết hợp, so sánh giữa các UY.
 - **Kỳ báo cáo**: so sánh giữa các năm nghiệp vụ; giữa các lần cập nhật số liệu của cùng một UY (tải nhiều bản `update_` khác ngày); theo quý hiệu lực của hợp đồng.
-- **Tái tục**: hợp đồng hết hạn trong 30/60/90/120/180 ngày tới và đã hết hạn trong 30 ngày qua, tự nhận diện hợp đồng đã tái tục, kèm lưu ý (tỷ lệ kết hợp cao, line vượt trần, vùng nhạy cảm, phí còn nợ).
+- **Tái tục**: tỷ lệ tái tục giữa hai UY liên tiếp (số đơn tái tục / số đơn đã đến hạn, theo số đơn và GWP), thay đổi phí trên đơn tái tục, đơn mới, đơn đổi broker, danh sách đơn không tái tục; so sánh theo môi giới, kênh, khu vực, quốc gia, leader. Kèm danh sách hợp đồng hết hạn trong 30/60/90/120/180 ngày tới và đã hết hạn trong 30 ngày qua, tự nhận diện hợp đồng đã tái tục, kèm lưu ý (tỷ lệ kết hợp cao, line vượt trần, vùng nhạy cảm, phí còn nợ).
 - **Thu phí**: thực thu (USD, % GWP, % NWP, % số đã đến hạn), phí quá hạn và tuổi nợ, nhắc kỳ phí sắp đến hạn (7/15/30/60/90 ngày), hợp đồng chưa có lịch thanh toán; so sánh theo UY, môi giới, kênh, khu vực, quốc gia.
 - **Bồi thường**, **Cỡ line & tập trung**, **Kiểm tra dữ liệu**.
 - **Xuất báo cáo Excel** gồm tất cả các bảng trên.
@@ -22,6 +22,7 @@ Tải lên các file theo dõi `UY_x_update_ddmmyyyy.xlsx`, app trả về ngay:
 | Tỷ lệ kết hợp | (Chi phí khai thác + bồi thường) / GWP |
 | Thực thu | Actual NWP của các kỳ ghi "Paid" trong sheet Installment (chưa nhập số thực thu thì lấy số tiền kỳ) |
 | Quá hạn | Kỳ có hạn trước ngày báo cáo mà chưa ghi "Paid" |
+| Tỷ lệ tái tục | Số đơn UY trước đã hết hạn (đến ngày báo cáo, không tính đơn huỷ và sửa đổi bổ sung) có hợp đồng cùng insured trong UY sau, hiệu lực trong ±90 ngày quanh ngày hết hạn ÷ tổng số đơn đã hết hạn |
 | Sắp đến hạn | Kỳ chưa thu có hạn trong số ngày đã chọn kể từ ngày báo cáo |
 
 Mọi tỷ lệ tính trên GWP. Báo cáo chính dùng bản mới nhất của mỗi UY; ngày chốt số liệu lấy từ tên file (`update_05102026` → 05/10/2026) và sửa được trên giao diện.

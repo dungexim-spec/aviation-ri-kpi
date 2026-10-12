@@ -371,19 +371,73 @@
   }
 
   // ---------- Tái tục ----------
-  const STOP = new Set(['pt', 'the', 'co', 'ltd', 'llc', 'jsc', 'inc', 'limited', 'company', 'and', 'or', 'of', 'a', 'b', 'c', 'd', 'i', 'ii', 'iii', 'pvt', 'plc', 'sa', 'corp', 'corporation', 'group', 'ojsc', 'cjsc', 'fze', 'fzc', 'tbk', 'persero']);
-  function insuredKey(name) {
-    const w = norm(name).replace(/\([^)]{0,6}\)/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((x) => x && !STOP.has(x));
-    return w.slice(0, 2).join(' ');
+  const STOP = new Set(['pt', 'p', 't', 'the', 'co', 'ltd', 'llc', 'jsc', 'inc', 'limited', 'company', 'and', 'or', 'of', 'as', 'a', 'b', 'c', 'd', 'e', 'i', 'ii', 'iii', 'iv', 'v', 'pvt', 'plc', 'sa', 'srl', 'corp', 'corporation', 'group', 'ojsc', 'cjsc', 'fze', 'fzc', 'dwc', 'tbk', 'persero', 'owners', 'operator', 'purchaser']);
+  const GENERIC = new Set(['air', 'airlines', 'airline', 'airways', 'aviation', 'aviasi', 'aero', 'services', 'service', 'cargo', 'transport', 'international']);
+  // Các từ phân biệt trong tên insured (bỏ từ pháp lý và từ chung như Air, Airlines, Aviation…)
+  function nameTokens(name) {
+    const w = norm(name).replace(/air\s+force/g, 'airforce').replace(/space\s+bee/g, 'spacebee').replace(/\([^)]{0,6}\)/g, ' ').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((x) => x && !STOP.has(x));
+    const d = w.filter((x) => !GENERIC.has(x));
+    return [...new Set((d.length ? d : w))];
+  }
+  function insuredKey(name) { return nameTokens(name).slice(0, 3).join(' '); }
+  // Mức giống nhau giữa hai tên: 2 = trùng bộ từ phân biệt (3 từ đầu), 1 = cùng từ đầu và bộ từ này nằm trong bộ kia, 0 = khác
+  function sameInsured(a, b) {
+    const x = nameTokens(a).slice(0, 3), y = nameTokens(b).slice(0, 3);
+    if (!x.length || !y.length || x[0] !== y[0]) return 0;
+    if (x.join(' ') === y.join(' ')) return 2;
+    const sx = new Set(x), sy = new Set(y);
+    if (x.every((t) => sy.has(t)) || y.every((t) => sx.has(t))) return 1;
+    return (x.length > 1 && y.length > 1 && x[1] === y[1]) ? 1 : 0;
+  }
+  const isEndt = (p) => /Endt|\(AP /i.test(p.insured);
+  // Tìm hợp đồng tái tục: cùng insured, hiệu lực trong ±90 ngày quanh ngày hết hạn, ưu tiên tên trùng hoàn toàn rồi gần ngày nhất
+  function findRenewal(p, pool) {
+    let best = null, bs = -1;
+    for (const q of pool) {
+      if (q === p || q.inc === null || q.inc < p.expC - 90 || q.inc > p.expC + 90 || isEndt(q)) continue;
+      const sc = sameInsured(p.insured, q.insured); if (!sc) continue;
+      const score = sc * 1000 - Math.abs(q.inc - (p.expC + 1));
+      if (score > bs) { bs = score; best = q; }
+    }
+    return best;
+  }
+  // Tỷ lệ tái tục: hợp đồng của UY trước đã đến hạn (hết hạn ≤ ngày báo cáo) có hợp đồng tái tục trong UY sau hay không
+  function renewalStats(model, filter) {
+    const f = filter || (() => true);
+    const bound = model.policies.filter((p) => p.bound_ && p.expC !== null && !isEndt(p));
+    const out = [];
+    for (let i = 0; i + 1 < model.uys.length; i++) {
+      const from = model.uys[i], to = model.uys[i + 1];
+      const next = bound.filter((q) => q.uy === to);
+      const prev = bound.filter((p) => p.uy === from && f(p));
+      const due = prev.filter((p) => p.expC <= model.asOf);
+      const used = new Set(); const rows = [];
+      due.forEach((p) => { const q = findRenewal(p, next.filter((x) => !used.has(x))); if (q) used.add(q); rows.push({ p, q }); });
+      const ren = rows.filter((r) => r.q);
+      const nextF = next.filter(f);
+      const renewalsInNext = nextF.filter((q) => used.has(q));
+      const s = {
+        from, to, nPrev: prev.length, nDue: due.length, nNotDue: prev.length - due.length, nRenewed: ren.length, nLost: due.length - ren.length,
+        gwpDue: sum(due, (p) => p.gwp), gwpRenewedPrev: sum(ren, (r) => r.p.gwp), gwpRenewedNew: sum(ren, (r) => r.q.gwp), gwpLost: sum(rows.filter((r) => !r.q), (r) => r.p.gwp),
+        nNext: nextF.length, nNew: nextF.length - renewalsInNext.length, gwpNext: sum(nextF, (q) => q.gwp), gwpNew: sum(nextF.filter((q) => !used.has(q)), (q) => q.gwp),
+        rows,
+      };
+      s.ratioN = s.nDue ? s.nRenewed / s.nDue : null;
+      s.ratioG = s.gwpDue ? s.gwpRenewedPrev / s.gwpDue : null;
+      s.premChange = s.gwpRenewedPrev ? s.gwpRenewedNew / s.gwpRenewedPrev - 1 : null;
+      s.newShareN = s.nNext ? s.nNew / s.nNext : null;
+      s.newShareG = s.gwpNext ? s.gwpNew / s.gwpNext : null;
+      out.push(s);
+    }
+    return out;
   }
   // Hợp đồng hết hạn trong [ngày báo cáo − lookback, ngày báo cáo + days]; tự nhận diện hợp đồng tái tục đã có trong dữ liệu.
   function renewals(model, days, lookback) {
     const base = model.asOf; const lb = lookback == null ? 30 : lookback;
     const bound = model.policies.filter((p) => p.bound_ && p.expC !== null);
-    const list = bound.filter((p) => p.expC >= base - lb && p.expC <= base + days && !/Endt|\(AP /i.test(p.insured));
+    const list = bound.filter((p) => p.expC >= base - lb && p.expC <= base + days && !isEndt(p));
     return list.map((p) => {
-      const k = insuredKey(p.insured);
-      const ren = bound.find((q) => q !== p && q.inc !== null && insuredKey(q.insured) === k && q.inc >= p.expC - 45 && q.inc <= p.expC + 45);
+      const ren = findRenewal(p, bound.filter((q) => q.inc > p.inc));
       const daysLeft = p.expC - base;
       const lr = p.ep > 0 ? p.incurred / p.ep : null;
       const comb = p.gwp > 0 ? (p.acqUsd + p.incurred) / p.gwp : null;
@@ -402,5 +456,5 @@
     }).sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
-  return { DEFAULT_SETTINGS, readWorkbook, build, summarize, segment, renewals, insuredKey, parseDate, fmtDate, todayDay, uyFromFilename, snapFromFilename, quarterLabel, DAY };
+  return { DEFAULT_SETTINGS, readWorkbook, build, summarize, segment, renewals, renewalStats, sameInsured, insuredKey, parseDate, fmtDate, todayDay, uyFromFilename, snapFromFilename, quarterLabel, DAY };
 });

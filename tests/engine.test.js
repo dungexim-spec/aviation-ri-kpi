@@ -90,3 +90,24 @@ assert.strictEqual(sc.overdue, 0);
 assert.ok(Math.abs(sc.collectedPctGwp - 3750 / 16000) < 1e-12);
 assert.strictEqual(sc.noSchedN, 1);               // Beta Cargo chưa có lịch
 console.log('OK – kiểm thử thu phí đạt');
+
+// v4: tỷ lệ tái tục
+const book2 = wb({
+  Policy: [P, ['N1', 'Marsh', 'PVI3', 'Alpha Air (A)', 'Asia', 'Vietnam', '2025-12-01', 'Bound', '2026-01-05', '2026-01-10', '2027-01-09', 'AXA XL', 'RI', 'MAAPS'],
+    ['N2', 'AJG', 'PVI4', 'Gamma Jet', 'Asia', 'Vietnam', '2026-01-01', 'Bound', '2026-02-01', '2026-02-01', '2027-01-31', 'AXA XL', 'RI', 'A1']],
+  Risk: [R, ['N1', 0.5, 100000000, 1000000000, 20, 800000000], ['N2', 0.5, 10000000, 500000000, 2, 20000000]],
+  Premium: [M, ['N1', 2200000, 11000, 8250, 25, 0, 0, 0, 8250, 'Bound'], ['N2', 400000, 2000, 1600, 20, 0, 0, 0, 1600, 'Bound']],
+  Claim: [C], Installment: [I],
+});
+const b2 = E.readWorkbook(XLSX, book2, 'UY2');
+const mr2 = E.build([b, b2], { asOf: E.parseDate('2026-06-01') });
+const [rs] = E.renewalStats(mr2);
+assert.strictEqual(rs.from, 'UY1'); assert.strictEqual(rs.to, 'UY2');
+assert.strictEqual(rs.nDue, 2);            // Alpha (hết hạn 09/01/2026), Beta (tạm tính 31/03/2026)
+assert.strictEqual(rs.nRenewed, 1);        // Alpha → Alpha Air (A), đổi broker AJG → Marsh
+assert.strictEqual(rs.ratioN, 0.5);
+assert.strictEqual(rs.nNew, 1);            // Gamma Jet là đơn mới
+assert.ok(Math.abs(rs.premChange - (11000 / 10000 - 1)) < 1e-12);
+assert.strictEqual(E.sameInsured('Air Company Somon Air LLC', 'Somon Air'), 2);
+assert.strictEqual(E.sameInsured('Thai AirAsia X Company Limited', 'Philippines AirAsia Inc.'), 0);
+console.log('OK – kiểm thử tỷ lệ tái tục đạt');
