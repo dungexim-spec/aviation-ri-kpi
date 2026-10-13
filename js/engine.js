@@ -310,7 +310,7 @@
     const cl = model.claims.filter((c) => c.policy && keys.has(c.key));
     const ins = model.insts.filter((i) => keys.has(i.key));
     const s = {
-      n: bp.length, gwp: sum(bp, (p) => p.gwp), nwp: sum(bp, (p) => p.nwp), earning: sum(bp, (p) => p.earning), ep: sum(bp, (p) => p.ep),
+      n: bp.filter((p) => !isEndt(p)).length, gwp: sum(bp, (p) => p.gwp), nwp: sum(bp, (p) => p.nwp), earning: sum(bp, (p) => p.earning), ep: sum(bp, (p) => p.ep),
       incurred: sum(cl, (c) => c.incurred), paid: sum(cl, (c) => c.paidT), os: sum(cl, (c) => c.os), nClaims: cl.length,
       nZero: cl.filter((c) => c.incurred === 0).length, cap: sum(bp, (p) => p.cap),
       overdue: sum(ins.filter((i) => i.days > 0), (i) => i.amount), overdue90: sum(ins.filter((i) => i.days > model.settings.overdueAlertDays), (i) => i.amount),
@@ -413,7 +413,8 @@
       const prev = bound.filter((p) => p.uy === from && f(p));
       const due = prev.filter((p) => p.expC <= model.asOf);
       const used = new Set(); const rows = [];
-      due.forEach((p) => { const q = findRenewal(p, next.filter((x) => !used.has(x))); if (q) used.add(q); rows.push({ p, q }); });
+      // đơn tái tục có thể nằm ở UY sau, hoặc ngay trong UY trước khi file UY trải hơn 12 tháng hiệu lực
+      due.forEach((p) => { const pool = bound.filter((x) => !used.has(x) && (x.uy === to || (x.uy === from && x.inc > p.inc))); const q = findRenewal(p, pool); if (q) used.add(q); rows.push({ p, q }); });
       const ren = rows.filter((r) => r.q);
       const nextF = next.filter(f);
       const renewalsInNext = nextF.filter((q) => used.has(q));
@@ -457,5 +458,5 @@
     }).sort((a, b) => a.daysLeft - b.daysLeft);
   }
 
-  return { DEFAULT_SETTINGS, readWorkbook, build, summarize, segment, renewals, renewalStats, sameInsured, insuredKey, parseDate, fmtDate, todayDay, uyFromFilename, snapFromFilename, quarterLabel, DAY };
+  return { DEFAULT_SETTINGS, readWorkbook, build, summarize, segment, renewals, renewalStats, findRenewal, sameInsured, insuredKey, parseDate, fmtDate, todayDay, uyFromFilename, snapFromFilename, quarterLabel, DAY };
 });
