@@ -33,6 +33,11 @@ App **không có máy chủ**. File Excel được đọc và tính toán bằng
 
 **Không commit file dữ liệu thật vào repository.** `.gitignore` đã chặn `*.xlsx`, `*.xls`, `*.csv`.
 
+## File mẫu nhập liệu
+
+`templates/Mau_nhap_lieu_UY_x_update_ddmmyyyy.xlsx` (nút **Tải file mẫu** trong app) là mẫu chuẩn: giữ đúng tên sheet và cột mà app đọc, có danh sách chọn, chặn ngày sai và số tham chiếu trùng, tô màu lỗi, và tự tính GWP/NWP/net earning, phần PVI của bồi thường. Thêm các cột `Prior PVI ref` (tính tỷ lệ tái tục chính xác), `Endorsement of` (dòng sửa đổi bổ sung không tính là đơn mới), `Source` (Major PVI / Non-major Alif), `Notes`.
+Dựng lại mẫu: `python3 tools/build_template.py templates/Mau_nhap_lieu_UY_x_update_ddmmyyyy.xlsx`.
+
 ## Triển khai lên GitHub Pages
 
 1. Đẩy toàn bộ thư mục này lên một repository GitHub (nhánh `main`).

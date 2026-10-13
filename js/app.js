@@ -16,7 +16,7 @@
 
   const state = {
     books: [], main: null, snaps: [], tab: 'overview', settings: loadSettings(), asOfManual: false,
-    scope: { broker: '', channel: '', region: '', coll: '' }, collDim: 'broker', renDim: 'broker', regionDim: 'region', renewDays: 90,
+    scope: { broker: '', channel: '', region: '', coll: '' }, collDim: 'broker', renDim: 'broker', channelDim: 'channel', regionDim: 'region', renewDays: 90,
     claimF: { uy: '', st: '', flag: '' }, issueF: { sev: '', uy: '', q: '' },
   };
 
@@ -134,7 +134,7 @@
   function render() {
     const v = $('#view'); const m = state.main;
     if (!m && !['settings', 'guide'].includes(state.tab)) { v.innerHTML = emptyView(); return; }
-    const fn = { overview, broker: () => segView('broker', 'Môi giới', 'broker'), channel: () => segView('channel', 'Kênh khai thác', 'channel'), region: regionView, period, renew, claims, collections, risk, issues, settings, guide }[state.tab];
+    const fn = { overview, broker: () => segView('broker', 'Môi giới', 'broker'), channel: channelView, region: regionView, period, renew, claims, collections, risk, issues, settings, guide }[state.tab];
     v.innerHTML = fn();
   }
   function emptyView() {
@@ -221,6 +221,10 @@
       <div class="panel"><h2>Tỷ lệ kết hợp theo ${esc(title.toLowerCase())}${rows.length > 14 ? ' (14 nhóm GWP lớn nhất)' : ''}</h2>${comboChart(chartRows, '% trên GWP; vạch dọc là 100%.')}</div>
       <div class="section"><h2>Bảng so sánh ${sc ? '– ' + esc(sc) : '– tất cả UY'}</h2>${table(cols, rows, { foot: true, groups: GROUPS(title, 1), sort: { i: 2, dir: -1 } })}</div>
       ${uys.length > 1 ? `<div class="section"><h2>So sánh giữa các năm nghiệp vụ</h2>${legend(uys)}${table(pcols, rows, { sort: { i: 1, dir: -1 } })}</div>` : ''}`;
+  }
+  function channelView() {
+    const ctl = `<label class="fld" for="channelDim">Phân theo<select id="channelDim"><option value="channel" ${state.channelDim === 'channel' ? 'selected' : ''}>Kênh (A1, MAAPS, Open market)</option><option value="source" ${state.channelDim === 'source' ? 'selected' : ''}>Nguồn (Major PVI / Non-major Alif)</option></select></label>`;
+    return segView(state.channelDim, state.channelDim === 'source' ? 'Nguồn' : 'Kênh khai thác', 'channel', ctl);
   }
   function regionView() {
     const ctl = `<label class="fld" for="regionDim">Phân theo<select id="regionDim"><option value="region" ${state.regionDim === 'region' ? 'selected' : ''}>Khu vực</option><option value="domicile" ${state.regionDim === 'domicile' ? 'selected' : ''}>Quốc gia</option></select></label>`;
@@ -457,7 +461,7 @@
     add('Chi tiet tai tuc', rl);
     add('Sap den han', m.insts.filter((i) => i.daysToDue !== null && i.daysToDue <= (state.settings.upcomingDays || 30)).sort((a, b) => a.due - b.due).map((i) => ({ 'Hạn': d(i.due), 'Còn (ngày)': i.daysToDue, UY: i.uy, 'Original insured': i.insured, Broker: i.broker, 'Kỳ': i.n, 'Số tiền': r2(i.amount) })));
     add('Qua han', m.insts.filter((i) => i.days > 0).sort((a, b) => b.days - a.days).map((i) => ({ UY: i.uy, 'Original insured': i.insured, Broker: i.broker, 'Kỳ': i.n, 'Hạn': d(i.due), 'Số tiền': r2(i.amount), 'Ngày quá hạn': i.days, 'Nhóm': i.bucket })));
-    add('Hop dong', m.policies.map((p) => ({ UY: p.uy, 'PVI ref': p.ref, MRO: p.mro, Broker: p.broker, 'Original insured': p.insured, Region: p.region, Domicile: p.domicile, Channel: p.channel, Leader: p.leader, Status: p.status, 'Hiệu lực': d(p.inc), 'Hết hạn': d(p.exp), 'PVI share': r4(p.share), GWP: r2(p.gwp), NWP: r2(p.nwp), 'Chi phí KT': r2(p.acqUsd), 'CP KT %': r4(p.acq), 'Đã trả': r2(p.paidT), 'Dự phòng': r2(p.os), 'Bồi thường': r2(p.incurred), 'Kết hợp % GWP': p.gwp ? r4((p.acqUsd + p.incurred) / p.gwp) : '', 'Cờ': p.flags.join('; ') })));
+    add('Hop dong', m.policies.map((p) => ({ UY: p.uy, 'PVI ref': p.ref, MRO: p.mro, Broker: p.broker, 'Original insured': p.insured, Region: p.region, Domicile: p.domicile, Channel: p.channel, Leader: p.leader, 'Nguồn': p.source, 'Prior PVI ref': p.priorRef, 'Endorsement of': p.endtOf, Status: p.status, 'Hiệu lực': d(p.inc), 'Hết hạn': d(p.exp), 'PVI share': r4(p.share), GWP: r2(p.gwp), NWP: r2(p.nwp), 'Chi phí KT': r2(p.acqUsd), 'CP KT %': r4(p.acq), 'Đã trả': r2(p.paidT), 'Dự phòng': r2(p.os), 'Bồi thường': r2(p.incurred), 'Kết hợp % GWP': p.gwp ? r4((p.acqUsd + p.incurred) / p.gwp) : '', 'Cờ': p.flags.join('; ') })));
     add('Boi thuong', m.claims.map((c) => ({ UY: c.uy, 'Số hồ sơ': c.claimNo, MRO: c.mro, 'Original insured': c.insured, Coverage: c.coverage, 'Loại': c.lossType, 'Ngày tổn thất': c.occ != null ? fD(c.occ) : String(c.occRaw ?? ''), 'Đã trả': r2(c.paidT), 'Dự phòng': r2(c.os), 'Bồi thường': r2(c.incurred), Status: c.status, 'Kiểm tra': c.flag })));
     add('Ky thanh toan', m.insts.map((i) => ({ UY: i.uy, MRO: i.mro, Broker: i.broker, 'Original insured': i.insured, 'Kỳ': i.n, 'Số tiền': r2(i.amount), 'Hạn': d(i.due), 'Trạng thái': i.paid, 'Thực thu': r2(i.collected), 'Ngày quá hạn': i.days, 'Nhóm': i.bucket })));
     add('Kiem tra du lieu', m.issues.map((i, k) => ({ '#': k + 1, 'Mức': i.sev, UY: i.uy, Sheet: i.sheet, 'Đối tượng': i.rec, 'Trường': i.field, 'Vấn đề': i.msg, 'Hướng xử lý': i.fix, 'Đã xử lý?': '' })));
@@ -470,7 +474,14 @@
     }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
-  function exportTemplate() {
+  async function exportTemplate() {
+    try {
+      const r = await fetch('templates/Mau_nhap_lieu_UY_x_update_ddmmyyyy.xlsx');
+      if (r.ok) { saveFile('Mau_nhap_lieu_UY_x_update_ddmmyyyy.xlsx', await r.blob()); return; }
+    } catch (e) { /* chạy ngoài GitHub Pages: dùng mẫu rút gọn */ }
+    exportTemplateBasic();
+  }
+  function exportTemplateBasic() {
     const wb = XLSX.utils.book_new(); const ex = 'VÍ DỤ – xoá dòng này';
     const sheets = {
       Policy: [['MRO', 'Broker', 'PIAS Ref', 'PVI ref number', 'Original Insured', 'Cedant Name', 'Region', 'Domicile', 'Risk offer date', 'Status', 'Risk bound date', 'Inception', 'Expiry', 'Flying/Non-flying', 'Leader', 'Risk type', 'Type', 'Category', 'Channel'], ['B0000EXAMPLE01', 'AJG', '', 'PVI202600001', ex, 'Example Insurance Co', 'Asia Pacific RIM', 'Vietnam', '2026-09-01', 'Bound', '2026-09-20', '2026-10-01', '2027-09-30', 'Flying', 'AXA XL', 'HSL', 'RI', '', 'A1']],
@@ -519,6 +530,7 @@
     const id = e.target.id; const v = e.target.value;
     if (id.startsWith('scope-')) { state.scope[id.slice(6)] = v; render(); }
     if (id === 'regionDim') { state.regionDim = v; render(); }
+    if (id === 'channelDim') { state.channelDim = v; render(); }
     if (id === 'collDim') { state.collDim = v; render(); }
     if (id === 'renDim') { state.renDim = v; render(); }
     if (id === 'upDays') { state.settings.upcomingDays = +v; saveSettings(); recompute(); }

@@ -142,7 +142,7 @@
           share: num(g(r, 'PVI share')) / 100, hull: num(g(r, 'Hull')), csl: num(g(r, 'CSL')), ac: num(g(r, 'A/C')), afv: num(g(r, 'AFV')),
           gwp100: num(g(m, 'Deposit GWP')), gwp: num(g(m, 'PVI deposite GWP', 'PVI deposit GWP')), nwp: num(g(m, 'PVI deposite NWP', 'PVI deposit NWP')),
           ded: num(g(m, 'Total deduction')) / 100, ff: num(g(m, 'Facility fee')) / 100, od: num(g(m, 'Other Deduction')), fund: num(g(m, 'Fund')),
-          earningSrc: g(m, 'PVI actual earning'), diffLead: num(g(m, 'Diffirental from lead', 'Differential from lead')), premStatus: clean(g(m, 'Premium status')),
+          earningSrc: g(m, 'PVI actual earning'), priorRef: clean(g(p, 'Prior PVI ref')), endtOf: clean(g(p, 'Endorsement of')), source: clean(g(p, 'Source')), notes: clean(g(p, 'Notes')), diffLead: num(g(m, 'Diffirental from lead', 'Differential from lead')), premStatus: clean(g(m, 'Premium status')),
         };
         o.region = S.regionMap[o.region] || o.region; o.leader = S.leaderMap[o.leader] || o.leader;
         o.offer = parseDate(o.offerRaw); o.bound = parseDate(o.boundRaw); o.inc = parseDate(o.incRaw); o.exp = parseDate(o.expRaw);
@@ -159,7 +159,7 @@
       list.forEach((x) => { (byMro[x.mro] = byMro[x.mro] || []).push(x); });
       mroKey[uy] = {};
       Object.entries(byMro).forEach(([mro, arr]) => {
-        const pref = arr.find((x) => x.status === 'Bound' && !/Endt|\(AP/i.test(x.insured)) || arr.find((x) => x.status === 'Bound') || arr[0];
+        const pref = arr.find((x) => x.status === 'Bound' && !x.endtOf && !/Endt|\(AP/i.test(x.insured)) || arr.find((x) => x.status === 'Bound') || arr[0];
         mroKey[uy][mro] = pref.key;
         if (arr.length > 1) iss(uy, 'Policy', arr.map((x) => x.insured.slice(0, 30)).join(' / '), 'MRO', `MRO ${mro} xuất hiện ${arr.length} dòng (${arr.map((x) => x.status).join(', ')})`, 'TB', 'Dùng PVI ref làm khoá; sửa đổi bổ sung ghi ở bảng riêng');
       });
@@ -187,7 +187,7 @@
       const d = o.exp - o.inc;
       if (d <= 0) iss(uy, 'Policy', nm, 'Expiry', `Ngày hết hạn ${fmtDate(o.exp)} không sau ngày hiệu lực ${fmtDate(o.inc)}`, 'Cao', 'Sửa ngày hết hạn (app tạm dùng hiệu lực + 12 tháng)');
       else if (d > 400) iss(uy, 'Policy', nm, 'Expiry', `Thời hạn ${d + 1} ngày (>13 tháng)`, 'Thấp', 'Xác nhận thời hạn kéo dài là đúng');
-      else if (d < 300 && !/Endt|\(AP/i.test(nm)) iss(uy, 'Policy', nm, 'Expiry', `Thời hạn chỉ ${d + 1} ngày`, 'Thấp', 'Xác nhận kỳ ngắn hạn là đúng');
+      else if (d < 300 && !o.endtOf && !/Endt|\(AP/i.test(nm)) iss(uy, 'Policy', nm, 'Expiry', `Thời hạn chỉ ${d + 1} ngày`, 'Thấp', 'Xác nhận kỳ ngắn hạn là đúng');
       [['offer', 'Risk offer date'], ['bound', 'Risk bound date']].forEach(([k, lab]) => { if (o[k] === PLACEHOLDER) iss(uy, 'Policy', nm, lab, 'Ngày 01/01/2025 có vẻ là giá trị điền tạm', 'TB', 'Cập nhật ngày thực tế'); });
       if (o.bound !== null && o.bound !== PLACEHOLDER && o.bound > o.inc) {
         o.flags.push('Bind sau hiệu lực');
@@ -389,9 +389,10 @@
     if (x.every((t) => sy.has(t)) || y.every((t) => sx.has(t))) return 1;
     return (x.length > 1 && y.length > 1 && x[1] === y[1]) ? 1 : 0;
   }
-  const isEndt = (p) => /Endt|\(AP /i.test(p.insured);
+  const isEndt = (p) => !!p.endtOf || /Endt|\(AP /i.test(p.insured);
   // Tìm hợp đồng tái tục: cùng insured, hiệu lực trong ±90 ngày quanh ngày hết hạn, ưu tiên tên trùng hoàn toàn rồi gần ngày nhất
   function findRenewal(p, pool) {
+    if (p.ref) { const exact = pool.find((q) => q !== p && q.priorRef && q.priorRef === p.ref && !isEndt(q)); if (exact) return exact; }
     let best = null, bs = -1;
     for (const q of pool) {
       if (q === p || q.inc === null || q.inc < p.expC - 90 || q.inc > p.expC + 90 || isEndt(q)) continue;

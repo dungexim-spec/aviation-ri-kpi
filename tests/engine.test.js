@@ -111,3 +111,21 @@ assert.ok(Math.abs(rs.premChange - (11000 / 10000 - 1)) < 1e-12);
 assert.strictEqual(E.sameInsured('Air Company Somon Air LLC', 'Somon Air'), 2);
 assert.strictEqual(E.sameInsured('Thai AirAsia X Company Limited', 'Philippines AirAsia Inc.'), 0);
 console.log('OK – kiểm thử tỷ lệ tái tục đạt');
+
+// v5: cột Prior PVI ref / Endorsement of
+const book3 = wb({
+  Policy: [P.concat(['Prior PVI ref', 'Endorsement of', 'Source']),
+    ['Q1', 'WTW', 'PVI9', 'Totally Different Name', 'Asia', 'Vietnam', '2025-12-01', 'Bound', '2026-01-05', '2026-01-10', '2027-01-09', 'AXA XL', 'RI', 'A1', 'PVI1', '', 'Major PVI'],
+    ['Q2', 'WTW', 'PVI9E', 'Totally Different Name AP', 'Asia', 'Vietnam', '2026-03-01', 'Bound', '2026-03-01', '2026-03-01', '2027-01-09', 'AXA XL', 'RI', 'A1', '', 'PVI9', 'Major PVI']],
+  Risk: [R, ['Q1', 0.5, 100000000, 1000000000, 20, 800000000], ['Q2', 0.5, 0, 0, 0, 0]],
+  Premium: [M, ['Q1', 2000000, 10000, 7500, 25, 0, 0, 0, 7500, 'Bound'], ['Q2', 100000, 500, 375, 25, 0, 0, 0, 375, 'Bound']],
+  Claim: [C], Installment: [I],
+});
+const b3 = E.readWorkbook(XLSX, book3, 'UY2');
+const m3 = E.build([b, b3], { asOf: E.parseDate('2026-06-01') });
+const [r3] = E.renewalStats(m3);
+assert.strictEqual(r3.nRenewed, 1);                       // Alpha → PVI9 nhờ Prior PVI ref dù tên khác
+assert.strictEqual(r3.rows.find((x) => x.p.ref === 'PVI1').q.ref, 'PVI9');
+assert.strictEqual(r3.nNext, 1);                          // dòng sửa đổi bổ sung không tính là đơn
+assert.strictEqual(m3.policies.find((p) => p.ref === 'PVI9').source, 'Major PVI');
+console.log('OK – kiểm thử cột mới đạt');
